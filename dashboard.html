@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="img/sena-logo.svg" type="image/svg+xml">
+    <title>Gestor de Archivos por Proyecto</title>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        #protegido {
+            display: none;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        /* Estilos para la barra lateral */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: 300px;
+            background: #f8f9fa;
+            border-right: 1px solid #dee2e6;
+            padding: 1rem;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            overflow-y: auto;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+        .sidebar.collapsed {
+            width: 75px;
+            overflow: hidden;
+        }
+        .sidebar .sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 1rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+        /* Evitar “flash” en blanco al expandir: no usar display:none;
+           ocultar con opacity/visibility y animar suavemente. */
+        .sidebar .sidebar-content,
+        .sidebar .sidebar-header h3,
+        .sidebar .form-label,
+        .sidebar .btn-text,
+        .sidebar #searchBtnText {
+            opacity: 1;
+            visibility: visible;
+            transition: opacity 180ms ease, visibility 180ms ease;
+            will-change: opacity;
+        }
+
+        .sidebar.collapsed .sidebar-content,
+        .sidebar.collapsed .sidebar-header h3,
+        .sidebar.collapsed .form-label,
+        .sidebar.collapsed .btn-text,
+        .sidebar.collapsed #searchBtnText {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        /* Al expandir, deja que el ancho se abra primero y luego aparece el contenido */
+        .sidebar:not(.collapsed) .sidebar-content,
+        .sidebar:not(.collapsed) .sidebar-header h3,
+        .sidebar:not(.collapsed) .form-label,
+        .sidebar:not(.collapsed) .btn-text,
+        .sidebar:not(.collapsed) #searchBtnText {
+            transition-delay: 80ms;
+        }
+        .sidebar .toggle-btn {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            color: #495057;
+            cursor: pointer;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s;
+        }
+        .sidebar .toggle-btn:hover {
+            background-color: #e9ecef;
+        }
+        .sidebar .sidebar-content {
+            padding-right: 5px;
+        }
+        .sidebar .form-control, .sidebar .form-select {
+            font-size: 0.9rem;
+            padding: 0.4rem 0.75rem;
+        }
+        .sidebar .input-group-text {
+            font-size: 0.9rem;
+            padding: 0.4rem 0.75rem;
+        }
+        /* Ajustes para el contenido principal */
+        .main-content {
+            margin-left: 300px;
+            transition: margin-left 0.3s ease;
+            width: calc(100% - 300px);
+            flex: 1 0 auto;
+            padding-top: 0;
+        }
+        .main-content.sidebar-collapsed {
+            margin-left: 70px;
+            width: calc(100% - 70px);
+        }
+        header {
+            margin-top: 0;
+            padding-top: 0;
+        }
+        .navbar {
+            margin-top: 0;
+        }
+        /* Header mejorado */
+        .sticky-top {
+            z-index: 900;
+        }
+        .botonesOpci {
+            left: 310px;
+            transition: left 0.3s ease;
+        }
+        .sidebar-collapsed + .main-content .botonesOpci {
+            left: 80px;
+        }
+        /* Mejoras visuales para las tablas */
+        .table-scroll {
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+        .table th {
+            position: sticky;
+            top: 0;
+            background-color: #f8f9fa;
+            z-index: 100;
+        }
+        /* Mejorar los badges */
+        .badge.bg-info { background-color: #135ea5 !important; }
+        .badge.bg-warning { background-color: #ffc107 !important; color: #212529 !important; }
+        .badge.bg-success { background-color: #198754 !important; }
+        
+        /* Mejorar la búsqueda */
+        .search-container {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #6c757d;
+        }
+        .search-box {
+            padding-left: 2.5rem;
+        }
+        
+        /* Mejorar la presentación de los tabs */
+        .nav-tabs .nav-link.active {
+            border-bottom: 3px solid #0d6efd;
+            font-weight: 600;
+        }
+        
+        /* Footer alineado con sidebar y sin saltos */
+        @media (min-width: 992px) {
+            .footer-sena {
+                position: fixed;
+                bottom: 0;
+                left: 300px;
+                width: calc(100% - 300px);
+                transition: left 0.3s ease, width 0.3s ease;
+                z-index: 800;
+            }
+            .footer-sena.sidebar-collapsed {
+                left: 70px;
+                width: calc(100% - 70px);
+            }
+        }
+        @media (max-width: 991.98px) {
+            .footer-sena {
+                position: relative;
+                left: 0;
+                width: 100%;
+            }
+        }
+        
+        /* Efectos hover mejorados */
+        .btn-action {
+            opacity: 0.7;
+            transition: all 0.2s;
+        }
+        .btn-action:hover {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+
+        /* Animación de hover en filas de tabla */
+        .file-row {
+            cursor: pointer;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        .file-row:hover {
+            
+            background-color: rgba(102, 126, 234, 0.1) !important;
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        /* Mejorar el dropzone */
+        #dropZone, #updateDropZone {
+            transition: all 0.3s;
+        }
+        #dropZone:hover, #updateDropZone:hover {
+            border-color: #0d6efd;
+            background-color: rgba(13, 110, 253, 0.05);
+        }
+        
+        /* Indicador de tipo de archivo */
+        .file-type-badge {
+            font-size: 0.75rem;
+            padding: 0.25em 0.5em;
+            font-weight: 600;
+        }
+    </style>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div id="protegido">
+
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h3 class="mb-0">Filtros de Búsqueda</h3>
+                <button class="toggle-btn" id="toggleSidebar">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+            </div>
+            <div class="sidebar-content">
+                <div class="mb-4">
+                    <div class="search-container">
+                        <i class="fas fa-search search-icon"></i>
+                        <input type="text" class="form-control search-box" id="searchTerm" placeholder="      Buscar en todos los campos">
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="form-label">Proyecto</label>
+                    <select class="form-select" id="searchProject">
+                        <option value="">Todos los proyectos</option>
+                    </select>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="form-label">Código SGPS</label>
+                    <input type="text" class="form-control" id="searchSgpsCode" placeholder="Código SGPS">
+                </div>
+                
+                <div class="mb-4">
+                    <label class="form-label">Centro de Estudio</label>
+                    <input type="text" class="form-control" id="searchStudyCenter" placeholder="Nombre del centro">
+                </div>
+                
+                <div class="mb-4">
+                    <label class="form-label">Regional</label>
+                    <input type="text" class="form-control" id="searchRegional" placeholder="Regional">
+                </div>
+                
+                <!-- <div class="mb-4">
+                    <label class="form-label">Rango de Fechas</label>
+                    <div class="input-group mb-2">
+                        <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
+                        <input type="date" class="form-control" id="searchDateFrom" placeholder="Fecha desde">
+                    </div>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
+                        <input type="date" class="form-control" id="searchDateTo" placeholder="Fecha hasta">
+                    </div>
+                </div> -->
+                
+                <div class="mb-4">
+                    <label class="form-label">Tipo de Archivo</label>
+                    <select class="form-select" id="searchFileType">
+                        <option value="">Todos los archivos</option>
+                        <option value="original">Archivos Originales</option>
+                        <option value="modified">Archivos Modificados</option>
+                    </select>
+                </div>
+                
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" id="searchBtn">
+                        <i class="fas fa-search me-2"></i>
+                        <span id="searchBtnText">Buscar</span>
+                        <span id="searchSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status"></span>
+                    </button>
+                    <button class="btn btn-outline-secondary" id="clearFiltersBtn">
+                        <i class="fas fa-sync-alt me-2"></i>
+                        <span class="btn-text">Limpiar Filtros</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contenido principal -->
+        <div class="main-content" id="mainContent">
+            <!-- Header -->
+            <header>
+                <nav class="navbar navbar-expand-lg sticky-top position-relative">
+                    <div class="sena-navbar container-fluid ">
+                        <!-- Logo / Brand -->
+                        <a class="navbar-brand fw-bold d-flex align-items-center" href="#">
+                        <img src="img/sena-logo.svg" alt="Logo SENA" class="me-2 sena-logo">
+                        GestionSena
+                        </a>
+                        <!-- Bloque de botones alineado a la izquierda -->
+                        <!-- <div class="botonesOpci position-absolute ">
+                        <a class="logoApp sena-logo fw-bold d-flex align-items-center" href="#"><i class="bi bi-bullseye"></i>MODULO INNOVACION</a>
+
+                        </div> -->
+                        <button id="openConf" class="btn sena-btn-outline">
+                            <i class="bi bi-gear"></i> Configuración
+                        </button>
+                        <!-- Links -->
+                        <div class="collapse navbar-collapse" id="topNav">
+                        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                            <li class="nav-item">
+                            <a class="nav-link active" href="#">
+                                <i class="bi bi-bullseye"></i> Metas
+                            </a>
+                            </li>
+                            <li class="nav-item">
+                            <a class="nav-link" href="#">
+                                <i class="bi bi-list-check"></i> Oferta
+                            </a>
+                            </li>
+                            <li class="nav-item">
+                            <a class="nav-link" href="#">
+                                <i class="bi bi-handshake"></i> Convenios
+                            </a>
+                            </li>
+                            <li class="nav-item">
+                            <a class="nav-link" href="#">
+                                <i class="bi bi-mortarboard"></i> Egresados
+                            </a>
+                            </li>
+                            <li class="nav-item">
+                            <a class="nav-link" href="#">
+                                <i class="bi bi-journal-text"></i> Gestión Curricular
+                            </a>
+                            </li>
+                            <li class="nav-item">
+                            <a class="nav-link" href="#">
+                                <i class="bi bi-people"></i> ECCL
+                            </a>
+                            </li>
+                            <li class="nav-item">
+                            <a class="nav-link" href="dashboard.html">
+                                <i class="bi bi-lightbulb"></i> Innovación
+                            </a>
+                            </li>
+                        </ul>
+                        </div>
+                        <div class="collapse navbar-collapse">
+                        <button id="user" class="btn sena-btn-1">
+                            <i class="bi bi-person-circle"></i> Perfil
+                        </button>
+                        <div class="dropdown">
+                            <button class="btn cerrarsec" data-bs-toggle="dropdown" id="logout_boton">
+                            <i class="bi bi-box-arrow-right"></i> Cerrar sesión
+                            </button>
+                        </div>
+                        </div>
+                    </div>
+                </nav>
+                <!-- <div class="container">
+                    <div class="row align-items-center">
+                        <div class="col-md-8 p-3">
+                            <h1 class="display-5 fw-bold">Gestor de Archivos por Proyecto</h1>
+                            <p class="lead">Sistema para gestionar versiones de archivos Excel con metadatos y búsqueda avanzada</p>
+                        </div>
+
+                    </div>
+                </div> -->
+            </header>
+            
+            <div class="container-fluid px-4">
+                <!-- Action Buttons -->
+                <!-- <div class="row mb-4">
+                    <div class="col-md-12">
+                        <button class="btn btn-outline-success" id="subirBtn">
+                            <i class="fas fa-upload me-2"></i>Subir Nuevo Archivo
+                        </button>
+                    </div>
+                </div> -->
+                
+                <!-- Results Section -->
+                <div class="card mb-5 ">
+                    <div class="card-header bg-white mt-3">
+                        <div class="d-flex justify-content-center align-items-center mb-3">
+                            <h2 class="mb-0"><strong>Repositorio Central de Documentos</strong></h2>
+
+                            <!-- <span class="badge bg-primary" id="resultsCount">0 archivos encontrados</span> -->
+                        </div>
+                        <div class="d-flex justify-content-center align-items-center mb-3">
+                            <button class="btn btn-outline-success" id="subirBtn">
+                                <i class="fas fa-upload me-2"></i>Subir Nuevo Archivo
+                            </button>
+                        </div>
+                        <ul class="nav nav-tabs  justify-content-center align-items-center" id="fileTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="current-tab" data-bs-toggle="tab" data-bs-target="#current-files" type="button" role="tab" aria-controls="current-files" aria-selected="false">
+                                    <i class="fas fa-clock me-2"></i>Archivos Actuales
+                                    <span class="badge bg-info ms-2" id="currentCount">0</span>
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="modified-tab" data-bs-toggle="tab" data-bs-target="#modified-files" type="button" role="tab" aria-controls="modified-files" aria-selected="false">
+                                    <i class="fas fa-edit me-2"></i>Archivos Modificados
+                                    <span class="badge bg-warning ms-2" id="modifiedCount">0</span>
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="original-tab" data-bs-toggle="tab" data-bs-target="#original-files" type="button" role="tab" aria-controls="original-files" aria-selected="true">
+                                    <i class="fas fa-file-alt me-2"></i>Archivos Originales
+                                    <span class="badge bg-success ms-2" id="originalCount">0</span>
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="card-body">
+                        <div class="tab-content" id="fileTabsContent">
+                            <!-- Original Files Tab -->
+                            <div class="tab-pane fade show active" id="original-files" role="tabpanel" aria-labelledby="original-tab">
+                                <!-- Controles de filtro específicos para archivos originales -->
+                                <div class="row mb-4">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Rango de Fechas</label>
+                                        <div class="input-group mb-2">
+                                            <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
+                                            <input type="date" class="form-control" id="originalDateFrom" placeholder="Fecha desde">
+                                        </div>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
+                                            <input type="date" class="form-control" id="originalDateTo" placeholder="Fecha hasta">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Mostrar últimos</label>
+                                        <select class="form-select" id="originalLimit">
+                                            <option value="10">10 archivos</option>
+                                            <option value="20" selected>20 archivos</option>
+                                            <option value="50">50 archivos</option>
+                                            <option value="100">100 archivos</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3 align-self-end">
+                                        <div class="d-grid gap-2">
+                                            <button class="btn btn-outline-primary" id="applyOriginalFilters">
+                                                <i class="fas fa-filter me-2"></i>Aplicar Filtros
+                                            </button>
+                                            <button class="btn btn-outline-secondary" id="clearOriginalFilters">
+                                                <i class="fas fa-eraser me-2"></i>Limpiar
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                </div>
+                                <div id="loadingSpinnerOriginal" class="text-center py-5 d-none">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Cargando...</span>
+                                    </div>
+                                    <p class="mt-3">Procesando solicitud...</p>
+                                </div>
+                                <div id="noResultsOriginal" class="text-center py-5 d-none">
+                                    <i class="fas fa-file-excel fa-4x text-muted mb-3"></i>
+                                    <h4>No se encontraron archivos originales</h4>
+                                    <p class="text-muted">Prueba con diferentes términos de búsqueda o ajusta los filtros.</p>
+                                </div>
+                                <div id="resultsTableOriginal" class="table-responsive table-scroll">
+                                    <table class="table table-hover align-middle">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Proyecto</th>
+                                                <th>Código SGPS</th>
+                                                <th>Centro de Estudio</th>
+                                                <th>Regional</th>
+                                                <th>Fecha Reporte</th>
+                                                <th>Fecha Carga</th>
+                                                <th>Responsable</th>
+                                                <th>Avance</th>
+                                                <th>Archivo</th>
+                                                <th>Tamaño</th>
+                                                <th>Version</th>
+                                                <th>Ruta Almacenamiento</th>
+                                                <th>Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="originalFilesTableBody">
+                                            <!-- Los resultados se cargarán aquí dinámicamente -->
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <nav class="d-flex justify-content-end mt-2" aria-label="Paginación archivos originales">
+                                    <ul class="pagination pagination-sm mb-0" id="originalPagination"></ul>
+                                </nav>
+                            </div>
+                            <!-- Modified Files Tab -->
+                            <div class="tab-pane fade" id="modified-files" role="tabpanel" aria-labelledby="modified-tab">
+                                <!-- Controles de filtro específicos para archivos modificados -->
+                                <div class="row mb-4">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Rango de Fechas</label>
+                                        <div class="input-group mb-2">
+                                            <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
+                                            <input type="date" class="form-control" id="modifiedDateFrom" placeholder="Fecha desde">
+                                        </div>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
+                                            <input type="date" class="form-control" id="modifiedDateTo" placeholder="Fecha hasta">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Mostrar últimos</label>
+                                        <select class="form-select" id="modifiedLimit">
+                                            <option value="10">10 archivos</option>
+                                            <option value="20" selected>20 archivos</option>
+                                            <option value="50">50 archivos</option>
+                                            <option value="100">100 archivos</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3 align-self-end">
+                                        <div class="d-grid gap-2">
+                                            <button class="btn btn-outline-primary" id="applyModifiedFilters">
+                                                <i class="fas fa-filter me-2"></i>Aplicar Filtros
+                                            </button>
+                                            <button class="btn btn-outline-secondary" id="clearModifiedFilters">
+                                                <i class="fas fa-eraser me-2"></i>Limpiar
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div id="loadingSpinnerModified" class="text-center py-5 d-none">
+                                    <div class="spinner-border text-warning" role="status">
+                                        <span class="visually-hidden">Cargando...</span>
+                                    </div>
+                                    <p class="mt-3">Procesando solicitud...</p>
+                                </div>
+                                <div id="noResultsModified" class="text-center py-5 d-none">
+                                    <i class="fas fa-edit fa-4x text-muted mb-3"></i>
+                                    <h4>No se encontraron archivos modificados</h4>
+                                    <p class="text-muted">Prueba con diferentes términos de búsqueda o ajusta los filtros.</p>
+                                </div>
+                                <div id="resultsTableModified" class="table-responsive table-scroll">
+                                    <table class="table table-hover align-middle">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Proyecto</th>
+                                                <th>Código SGPS</th>
+                                                <th>Centro de Estudio</th>
+                                                <th>Regional</th>
+                                                <th>Fecha Reporte</th>
+                                                <th>Fecha Carga</th>
+                                                <th>Responsable</th>
+                                                <th>Avance</th>
+                                                <th>Archivo</th>
+                                                <th>Tamaño</th>
+                                                <th>Version</th>
+                                                <th>Ruta Almacenamiento</th>
+                                                <th>Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="modifiedFilesTableBody">
+                                            <!-- Los resultados se cargarán aquí dinámicamente -->
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <nav class="d-flex justify-content-end mt-2" aria-label="Paginación archivos modificados">
+                                    <ul class="pagination pagination-sm mb-0" id="modifiedPagination"></ul>
+                                </nav>
+                            </div>
+                            <!-- Current Files Tab -->
+                            <div class="tab-pane fade" id="current-files" role="tabpanel" aria-labelledby="current-tab">
+                                <!-- Controles de filtro específicos para archivos actuales -->
+                                <div class="row mb-4">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Rango de Fechas</label>
+                                        <div class="input-group mb-2">
+                                            <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
+                                            <input type="date" class="form-control" id="currentDateFrom" placeholder="Fecha desde">
+                                        </div>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
+                                            <input type="date" class="form-control" id="currentDateTo" placeholder="Fecha hasta">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Mostrar últimos</label>
+                                        <select class="form-select" id="currentLimit">
+                                            <option value="10">10 archivos</option>
+                                            <option value="20" selected>20 archivos</option>
+                                            <option value="50">50 archivos</option>
+                                            <option value="100">100 archivos</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3 align-self-end">
+                                        <div class="d-grid gap-2">
+                                            <button class="btn btn-outline-primary" id="applyCurrentFilters">
+                                                <i class="fas fa-filter me-2"></i>Aplicar Filtros
+                                            </button>
+                                            <button class="btn btn-outline-secondary" id="clearCurrentFilters">
+                                                <i class="fas fa-eraser me-2"></i>Limpiar
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div id="loadingSpinnerCurrent" class="text-center py-5 d-none">
+                                    <div class="spinner-border text-info" role="status">
+                                        <span class="visually-hidden">Cargando...</span>
+                                    </div>
+                                    <p class="mt-3">Procesando solicitud...</p>
+                                </div>
+                                <div id="noResultsCurrent" class="text-center py-5 d-none">
+                                    <i class="fas fa-clock fa-4x text-muted mb-3"></i>
+                                    <h4>No se encontraron archivos actuales</h4>
+                                    <p class="text-muted">Prueba con diferentes filtros de fecha o ajusta los parámetros.</p>
+                                </div>
+                                <div id="resultsTableCurrent" class="table-responsive table-scroll">
+                                    <table class="table table-hover align-middle">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Proyecto</th>
+                                                <th>Código SGPS</th>
+                                                <th>Centro de Estudio</th>
+                                                <th>Regional</th>
+                                                <th>Fecha Reporte</th>
+                                                <th>Fecha Carga</th>
+                                                <th>Responsable</th>
+                                                <th>Avance</th>
+                                                <th>Archivo</th>
+                                                <th>Tamaño</th>
+                                                <th>Version</th>
+                                                <th>Ruta Almacenamiento</th>
+                                                <th>Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="currentFilesTableBody">
+                                            <!-- Los resultados se cargarán aquí -->
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <nav class="d-flex justify-content-end mt-2" aria-label="Paginación archivos actuales">
+                                    <ul class="pagination pagination-sm mb-0" id="currentPagination"></ul>
+                                </nav>
+                            </div>
+                        </div>
+                        <!-- Analytics / Gráficas -->
+                        <div class="container-fluid mb-5" id="statsSection">
+                            <div class="card mb-4">
+                                <div class="card-header bg-white">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <h3 class="mb-0">Indicadores</h3>
+                                        <small class="text-muted" id="statsLastUpdated"> </small>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row g-3">
+                                        <div class="col-lg-4">
+                                            <div class="card h-100">
+                                                <div class="card-body">
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <h6 class="mb-0">Originales vs Modificados</h6>
+                                                        <span class="badge bg-primary" id="statTotalArchivos">-</span>
+                                                    </div>
+                                                    <div style="height: 240px;">
+                                                        <canvas id="chartOriginalVsModified"></canvas>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="col-lg-4">
+                                            <div class="card h-100">
+                                                <div class="card-body">
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <h6 class="mb-0">Archivos Actuales</h6>
+                                                        <span class="badge bg-info" id="statArchivosActuales">-</span>
+                                                    </div>
+                                                    <div style="height: 240px;">
+                                                        <canvas id="chartTotales"></canvas>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="col-lg-4">
+                                            <div class="card h-100">
+                                                <div class="card-body">
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <h6 class="mb-0">Resultados con filtros</h6>
+                                                        <span class="badge bg-success" id="statEncontrados">-</span>
+                                                    </div>
+                                                    <div style="height: 240px;">
+                                                        <canvas id="chartEncontrados"></canvas>
+                                                    </div>
+                                                    <small class="text-muted d-block mt-2">Usa “Buscar” para actualizar según filtros.</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+
+
+
+
+
+
+
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+
+
+        
+        
+        <footer class="footer-sena mt-auto">
+            <div class="footer-top container row py-4 mx-auto">
+                <div class="col-md-6 m-auto">
+                    <img src="img/sena-logo.svg" alt="Logo SENA" class="footer-logo mb-2">
+                    <p class="footer-description">
+                    <!--Servicio Nacional de Aprendizaje – SENA. Módulo de Metas. 
+                     Todas las funciones, cursos y servicios oficiales están regulados y certificados. -->
+                    </p>
+                </div>
+            </div>  
+            <div class="footer-bottom py-3 text-center">
+                <small>© 2025 Servicio Nacional de Aprendizaje – SENA. Todos los derechos reservados.</small>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Modales -->
+    <!-- Upload Modal -->
+    <div class="modal fade" id="subirModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="uploadModalLabel">Subir Nuevo Archivo</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="uploadForm">
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="nameProject" class="form-label">Nombre del Proyecto</label>
+                                <input type="text" class="form-control" id="nameProject" placeholder="Nombre del Proyecto">
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="projectSelect" class="form-label">Categoria del Proyecto</label>
+                                <select class="form-select" id="projectSelect" required>
+                                    <option value="">Seleccione un proyecto</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="reportDate" class="form-label">Fecha de Reporte *</label>
+                                <input type="date" class="form-control" id="reportDate" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="sgpsCode" class="form-label">Código SGPS</label>
+                                <input type="text" class="form-control" id="sgpsCode" placeholder="Código SGPS">
+                            </div>
+                            <!-- <div class="col-md-6 mb-3">
+                                <label for="studyCenterName" class="form-label">Nombre del Centro de Estudio</label>
+                                <input type="text" class="form-control" id="studyCenterName" placeholder="Nombre del centro de estudio">
+                            </div> -->
+                            <div class="col-md-6 mb-3">
+                                <label for="studyCenterName" class="form-label">Nombre del Centro de Estudio</label>
+                                <select class="form-select" id="studyCenterName" required>
+                                    <option value="">Seleccione un centro de estudio</option>
+                                    <option value="SECTOR AGROPECUARIO">SECTOR AGROPECUARIO</option>
+                                    <option value="CITI">CITI DOSQUEBRADAS</option>
+                                    <option value="COMERCIO Y SERVICIOS">COMERCIO Y SERVICIOS</option>
+
+
+                                </select>
+                            </div>
+
+
+                            
+                        </div>
+                        <div class="row">
+                            <!-- corregir-->
+                            <!-- <div class="col-md-6 mb-3"> 
+                                <label for="regional" class="form-label">Regional del Centro de Estudio</label>
+                                <input type="text" class="form-control" id="regional" placeholder="Regional">
+                            </div> -->
+                            <div class="col-md-6 mb-3"><!--HACER QUE ESTO CONSUMA DEL BACKEND NO ASI-->
+                                <label for="regional" class="form-label">Regional del Centro de Estudio</label>
+                                <select class="form-select" id="regional" required>
+                                    <option value="">Seleccione una regional</option>
+                                    <option value="RISARALDA">RISARALDA</option>
+                                    <option value="ANTIOQUIA">ANTIOQUIA</option>
+                                    <option value="CALDAS">CALDAS</option>
+                                    <option value="CUNDINAMARCA">CUNDINAMARCA</option>
+                                    <option value="VALLE">VALLE</option>
+
+                                </select>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="projectResponsibles" class="form-label">Responsables del Proyecto</label>
+                                <input type="text" class="form-control" id="projectResponsibles" placeholder="Responsables del proyecto (opcional)">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="responsible" class="form-label">Responsable *</label>
+                                <input type="text" class="form-control" id="responsible" placeholder="Nombre del responsable" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="progress" class="form-label">Etapa / Avance (%) *</label>
+                                <input type="number" class="form-control" id="progress" min="0" max="100" placeholder="Porcentaje de avance" required>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="observations" class="form-label">Observaciones Clave</label>
+                            <textarea class="form-control" id="observations" rows="3" placeholder="Ingrese observaciones importantes sobre este reporte"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="fileInput" class="form-label">Archivo Excel *</label>
+                            <div class="border border-2 border-dashed rounded-3 p-4 text-center" id="dropZone">
+                                <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                                <p class="text-muted">Arrastra y suelta tu archivo aquí o</p>
+                                <input type="file" class="form-control d-none" id="fileInput" accept=".xlsx,.xls" required>
+                                <button type="button" class="btn btn-outline-primary" id="selectFileBtn">Seleccionar archivo</button>
+                                <div class="mt-3" id="fileNameDisplay"></div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-success" id="submitUpload">
+                                <span id="uploadText">Subir Archivo</span>
+                                <span id="uploadSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status"></span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Versions Modal -->
+    <div class="modal fade" id="versionsModal" tabindex="-1" aria-labelledby="versionsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title" id="versionsModalLabel">Versiones del Archivo</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="versionsLoading" class="text-center py-4 d-none">
+                        <div class="spinner-border text-info" role="status">
+                            <span class="visually-hidden">Cargando...</span>
+                        </div>
+                        <p class="mt-3">Cargando versiones...</p>
+                    </div>
+                    <div id="versionsContent">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Versión</th>
+                                        <th>Fecha de Subida</th>
+                                        <th>Fecha de Reporte</th>
+                                        <th>Responsable</th>
+                                        <th>Avance</th>
+                                        <th>Tamaño</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="versionsTableBody">
+                                    <!-- Las versiones se cargarán aquí -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Update File Modal -->
+    <div class="modal fade" id="updateFileModal" tabindex="-1" aria-labelledby="updateFileModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title" id="updateFileModalLabel">Actualizar Archivo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="updateFileForm">
+                        <input type="hidden" id="updateFileId">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="updateNameProject" class="form-label">Nombre del Proyecto</label>
+                                <input type="text" class="form-control" id="updateNameProject" placeholder="Nombre del Proyecto">
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="updateProjectSelect" class="form-label">Categoria del Proyecto</label>
+                                <select class="form-select" id="updateProjectSelect" required>
+                                    <option value="">Seleccione un proyecto</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="updateReportDate" class="form-label">Fecha de Reporte *</label>
+                                <input type="date" class="form-control" id="updateReportDate" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="updateSgpsCode" class="form-label">Código SGPS</label>
+                                <input type="text" class="form-control" id="updateSgpsCode" placeholder="Código SGPS">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="updateStudyCenterName" class="form-label">Nombre del Centro de Estudio</label>
+                                <input type="text" class="form-control" id="updateStudyCenterName" placeholder="Nombre del centro de estudio">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="updateRegional" class="form-label">Regional del Centro de Estudio</label>
+                                <input type="text" class="form-control" id="updateRegional" placeholder="Regional">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="updateProjectResponsibles" class="form-label">Responsables del Proyecto</label>
+                                <input type="text" class="form-control" id="updateProjectResponsibles" placeholder="Responsables del proyecto (opcional)">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="updateResponsible" class="form-label">Responsable *</label>
+                                <input type="text" class="form-control" id="updateResponsible" placeholder="Nombre del responsable" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="updateProgress" class="form-label">Etapa / Avance (%) *</label>
+                                <input type="number" class="form-control" id="updateProgress" min="0" max="100" placeholder="Porcentaje de avance" required>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="updateModificationReason" class="form-label">Razón de la Modificación</label>
+                            <textarea class="form-control" id="updateModificationReason" rows="2" placeholder="Explique por qué está modificando este archivo"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="updateObservations" class="form-label">Observaciones Clave</label>
+                            <textarea class="form-control" id="updateObservations" rows="3" placeholder="Ingrese observaciones importantes sobre este reporte"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="updateFileInput" class="form-label">Nuevo Archivo Excel *</label>
+                            <div class="border border-2 border-dashed rounded-3 p-4 text-center" id="updateDropZone">
+                                <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                                <p class="text-muted">Arrastra y suelta tu archivo aquí o</p>
+                                <input type="file" class="form-control d-none" id="updateFileInput" accept=".xlsx,.xls" required>
+                                <button type="button" class="btn btn-outline-primary" id="updateSelectFileBtn">Seleccionar archivo</button>
+                                <div class="mt-3" id="updateFileNameDisplay"></div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-warning" id="submitUpdate">
+                                <span id="updateText">Actualizar Archivo</span>
+                                <span id="updateSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status"></span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Delete Confirmation Modal -->
+    <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteConfirmModalLabel">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Confirmar Eliminación de Archivo
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger" role="alert">
+                        <i class="fas fa-exclamation-circle me-2"></i><strong>¡Cuidado!</strong> Esta acción no se puede deshacer. Se eliminará permanentemente el siguiente archivo:
+                    </div>
+                    
+                    <!-- Información del archivo a eliminar -->
+                    <div class="row" id="deleteFileDetails">
+                        <div class="col-md-6">
+                            <div class="card mb-3">
+                                <div class="card-body">
+                                    <h6 class="card-title text-danger"><i class="fas fa-file me-2"></i>Nombre</h6>
+                                    <p class="card-text fw-bold" id="deleteFileName">-</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card mb-3">
+                                <div class="card-body">
+                                    <h6 class="card-title"><i class="fas fa-folder me-2"></i>Proyecto</h6>
+                                    <p class="card-text" id="deleteFileProject">-</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card mb-3">
+                                <div class="card-body">
+                                    <h6 class="card-title"><i class="fas fa-tag me-2"></i>Categoría</h6>
+                                    <p class="card-text" id="deleteFileCategory">-</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card mb-3">
+                                <div class="card-body">
+                                    <h6 class="card-title"><i class="fas fa-code me-2"></i>Código SGPS</h6>
+                                    <p class="card-text" id="deleteFileSgps">-</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card mb-3">
+                                <div class="card-body">
+                                    <h6 class="card-title"><i class="fas fa-building me-2"></i>Centro</h6>
+                                    <p class="card-text" id="deleteFileCenter">-</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card mb-3">
+                                <div class="card-body">
+                                    <h6 class="card-title"><i class="fas fa-hdd me-2"></i>Tamaño</h6>
+                                    <p class="card-text" id="deleteFileSize">-</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card mb-3">
+                                <div class="card-body">
+                                    <h6 class="card-title"><i class="fas fa-calendar me-2"></i>Fecha de Carga</h6>
+                                    <p class="card-text" id="deleteFileDate">-</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-danger" id="confirmDelete">
+                        <i class="fas fa-trash me-2"></i>Sí, Eliminar Permanentemente
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Details Modal -->
+    <div class="modal fade" id="fileDetailsModal" tabindex="-1" aria-labelledby="fileDetailsLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="fileDetailsLabel">
+                        <i class="fas fa-file-excel me-2"></i>Detalles del Archivo
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Proyecto</h6>
+                                    <p class="card-text fw-bold" id="detailProyecto">-</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Categoría</h6>
+                                    <p class="card-text fw-bold" id="detailCategoria">-</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Código SGPS</h6>
+                                    <p class="card-text fw-bold" id="detailSgps">-</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Centro de Estudio</h6>
+                                    <p class="card-text fw-bold" id="detailCentro">-</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Regional</h6>
+                                    <p class="card-text fw-bold" id="detailRegional">-</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Responsable</h6>
+                                    <p class="card-text fw-bold" id="detailResponsable">-</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Fecha de Reporte</h6>
+                                    <p class="card-text fw-bold" id="detailFechaReporte">-</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Fecha de Carga</h6>
+                                    <p class="card-text fw-bold" id="detailFechaCarga">-</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Tamaño</h6>
+                                    <p class="card-text fw-bold" id="detailTamano">-</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Nombre del Archivo</h6>
+                                    <p class="card-text fw-bold" id="detailNombreArchivo">-</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Versión</h6>
+                                    <p class="card-text fw-bold"><span class="badge bg-secondary" id="detailVersion">-</span></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Avance (%)</h6>
+                                    <div id="detailAvance">-</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Observaciones</h6>
+                                    <p class="card-text" id="detailObservaciones">-</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="card border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title text-muted">Ruta de Almacenamiento</h6>
+                                    <p class="card-text small text-break" id="detailRuta">-</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Session Expired Modal -->
+    <div class="modal fade" id="sessionExpiredModal" tabindex="-1" aria-labelledby="sessionExpiredLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="sessionExpiredLabel">
+                        <i class="fas fa-lock me-2"></i>Sesión Expirada
+                    </h5>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger mb-3">
+                        <strong>Tu sesión ha expirado</strong>
+                    </div>
+                    <p>No tienes permisos para acceder a esta sección. Por favor, inicia sesión nuevamente.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" id="goToLoginBtn">
+                        <i class="fas fa-sign-in-alt me-2"></i>Ir al Login
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" integrity="sha256-8vXSc2Ac4k6WNsKcP3sdF1ydOVm56LhPfJp/5Vt8xok=" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    
+    <script type="module" src="js/files.js"></script>
+    <script src="js/dashboard.js"></script>
+    
+    <script>
+        // Habilitar tooltips (delegado) para filas dinámicas
+        document.addEventListener('DOMContentLoaded', function () {
+            if (window.bootstrap?.Tooltip) {
+                new bootstrap.Tooltip(document.body, {
+                    selector: '[data-bs-toggle="tooltip"]',
+                    trigger: 'hover focus',
+                    boundary: document.body
+                });
+            }
+        });
+
+        // Manejo global de sesión expirada
+        window.showSessionExpiredModal = function() {
+            // Mostrar modal
+            const modal = new bootstrap.Modal(document.getElementById('sessionExpiredModal'));
+            modal.show();
+            
+            // Botón para ir al login
+            document.getElementById('goToLoginBtn').onclick = function() {
+                localStorage.removeItem('access_token');
+                window.location.href = 'index.html';
+            };
+        };
+        
+        // Toggle sidebar
+        document.getElementById('toggleSidebar').addEventListener('click', function() {
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('mainContent');
+            const footer = document.querySelector('.footer-sena');
+            const toggleBtn = this;
+            
+            sidebar.classList.toggle('collapsed');
+            mainContent.classList.toggle('sidebar-collapsed');
+            footer.classList.toggle('sidebar-collapsed');
+            
+            // Cambiar icono
+            if (sidebar.classList.contains('collapsed')) {
+                toggleBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
+            } else {
+                toggleBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
+            }
+        });
+        
+        // Ajustar layout al cargar
+        window.addEventListener('load', function() {
+            const sidebar = document.getElementById('sidebar');
+            if (window.innerWidth < 992) { // Pantallas pequeñas
+                sidebar.classList.add('collapsed');
+                document.getElementById('mainContent').classList.add('sidebar-collapsed');
+                document.querySelector('.footer-sena').classList.add('sidebar-collapsed');
+                document.getElementById('toggleSidebar').innerHTML = '<i class="fas fa-chevron-right"></i>';
+            }
+        });
+        
+        // Ajustar layout al redimensionar
+        window.addEventListener('resize', function() {
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('mainContent');
+            const footer = document.querySelector('.footer-sena');
+            
+            if (window.innerWidth < 992 && !sidebar.classList.contains('collapsed')) {
+                sidebar.classList.add('collapsed');
+                mainContent.classList.add('sidebar-collapsed');
+                footer.classList.add('sidebar-collapsed');
+                document.getElementById('toggleSidebar').innerHTML = '<i class="fas fa-chevron-right"></i>';
+            } else if (window.innerWidth >= 992 && sidebar.classList.contains('collapsed')) {
+                sidebar.classList.remove('collapsed');
+                mainContent.classList.remove('sidebar-collapsed');
+                footer.classList.remove('sidebar-collapsed');
+                document.getElementById('toggleSidebar').innerHTML = '<i class="fas fa-chevron-left"></i>';
+            }
+        });
+    </script>
+</body>
+</html>
