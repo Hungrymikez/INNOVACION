@@ -36,6 +36,21 @@
             width: 75px;
             overflow: hidden;
         }
+
+        /* Backdrop para modo móvil (sidebar tipo off-canvas) */
+        .sidebar-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.35);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 180ms ease, visibility 180ms ease;
+            z-index: 950;
+        }
+        .sidebar-backdrop.show {
+            opacity: 1;
+            visibility: visible;
+        }
         .sidebar .sidebar-header {
             display: flex;
             justify-content: space-between;
@@ -115,6 +130,10 @@
             margin-left: 70px;
             width: calc(100% - 70px);
         }
+
+        body.sidebar-open {
+            overflow: hidden;
+        }
         header {
             margin-top: 0;
             padding-top: 0;
@@ -187,6 +206,28 @@
             }
         }
         @media (max-width: 991.98px) {
+            /* En móvil: el contenido siempre a 100% (sin empuje lateral) */
+            .main-content,
+            .main-content.sidebar-collapsed {
+                margin-left: 0;
+                width: 100%;
+            }
+
+            /* Sidebar en móvil: off-canvas */
+            .sidebar {
+                width: min(85vw, 320px);
+                transform: translateX(-105%);
+                transition: transform 0.28s ease;
+            }
+            .sidebar.mobile-open {
+                transform: translateX(0);
+            }
+            /* En móvil, "collapsed" no debe achicar a 75px; se mantiene off-canvas */
+            .sidebar.collapsed {
+                width: min(85vw, 320px);
+                overflow-y: auto;
+            }
+
             .footer-sena {
                 position: relative;
                 left: 0;
@@ -314,12 +355,18 @@
             </div>
         </div>
 
+        <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+
         <!-- Contenido principal -->
         <div class="main-content" id="mainContent">
             <!-- Header -->
             <header>
                 <nav class="navbar navbar-expand-lg sticky-top position-relative">
                     <div class="sena-navbar container-fluid ">
+                        <!-- Toggle sidebar (solo móvil) -->
+                        <button class="btn btn-link d-lg-none me-2" id="mobileSidebarToggle" type="button" aria-label="Abrir filtros">
+                            <i class="fas fa-bars"></i>
+                        </button>
                         <!-- Logo / Brand -->
                         <a class="navbar-brand fw-bold d-flex align-items-center" href="#">
                         <img src="img/sena-logo.svg" alt="Logo SENA" class="me-2 sena-logo">
@@ -1268,8 +1315,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" integrity="sha256-8vXSc2Ac4k6WNsKcP3sdF1ydOVm56LhPfJp/5Vt8xok=" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
     
     <script type="module" src="js/files.js"></script>
     <script src="js/dashboard.js"></script>
@@ -1299,54 +1344,82 @@
             };
         };
         
-        // Toggle sidebar
-        document.getElementById('toggleSidebar').addEventListener('click', function() {
+        // Sidebar responsive: desktop (colapsar/expandir) + móvil (off-canvas overlay)
+        (function () {
             const sidebar = document.getElementById('sidebar');
             const mainContent = document.getElementById('mainContent');
             const footer = document.querySelector('.footer-sena');
-            const toggleBtn = this;
-            
-            sidebar.classList.toggle('collapsed');
-            mainContent.classList.toggle('sidebar-collapsed');
-            footer.classList.toggle('sidebar-collapsed');
-            
-            // Cambiar icono
-            if (sidebar.classList.contains('collapsed')) {
-                toggleBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
-            } else {
-                toggleBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
+            const desktopToggleBtn = document.getElementById('toggleSidebar');
+            const mobileToggleBtn = document.getElementById('mobileSidebarToggle');
+            const backdrop = document.getElementById('sidebarBackdrop');
+
+            function isMobile() {
+                return window.innerWidth < 992;
             }
-        });
-        
-        // Ajustar layout al cargar
-        window.addEventListener('load', function() {
-            const sidebar = document.getElementById('sidebar');
-            if (window.innerWidth < 992) { // Pantallas pequeñas
-                sidebar.classList.add('collapsed');
-                document.getElementById('mainContent').classList.add('sidebar-collapsed');
-                document.querySelector('.footer-sena').classList.add('sidebar-collapsed');
-                document.getElementById('toggleSidebar').innerHTML = '<i class="fas fa-chevron-right"></i>';
+
+            function openMobileSidebar() {
+                sidebar.classList.add('mobile-open');
+                backdrop?.classList.add('show');
+                document.body.classList.add('sidebar-open');
             }
-        });
-        
-        // Ajustar layout al redimensionar
-        window.addEventListener('resize', function() {
-            const sidebar = document.getElementById('sidebar');
-            const mainContent = document.getElementById('mainContent');
-            const footer = document.querySelector('.footer-sena');
-            
-            if (window.innerWidth < 992 && !sidebar.classList.contains('collapsed')) {
-                sidebar.classList.add('collapsed');
-                mainContent.classList.add('sidebar-collapsed');
-                footer.classList.add('sidebar-collapsed');
-                document.getElementById('toggleSidebar').innerHTML = '<i class="fas fa-chevron-right"></i>';
-            } else if (window.innerWidth >= 992 && sidebar.classList.contains('collapsed')) {
-                sidebar.classList.remove('collapsed');
-                mainContent.classList.remove('sidebar-collapsed');
-                footer.classList.remove('sidebar-collapsed');
-                document.getElementById('toggleSidebar').innerHTML = '<i class="fas fa-chevron-left"></i>';
+
+            function closeMobileSidebar() {
+                sidebar.classList.remove('mobile-open');
+                backdrop?.classList.remove('show');
+                document.body.classList.remove('sidebar-open');
             }
-        });
+
+            function syncDesktopIcon() {
+                if (!desktopToggleBtn) return;
+                desktopToggleBtn.innerHTML = sidebar.classList.contains('collapsed')
+                    ? '<i class="fas fa-chevron-right"></i>'
+                    : '<i class="fas fa-chevron-left"></i>';
+            }
+
+            // Botón dentro del sidebar (desktop)
+            if (desktopToggleBtn) {
+                desktopToggleBtn.addEventListener('click', function () {
+                    if (isMobile()) {
+                        closeMobileSidebar();
+                        return;
+                    }
+                    sidebar.classList.toggle('collapsed');
+                    mainContent.classList.toggle('sidebar-collapsed');
+                    footer?.classList.toggle('sidebar-collapsed');
+                    syncDesktopIcon();
+                });
+            }
+
+            // Botón hamburguesa (móvil)
+            if (mobileToggleBtn) {
+                mobileToggleBtn.addEventListener('click', function () {
+                    if (!isMobile()) return;
+                    if (sidebar.classList.contains('mobile-open')) closeMobileSidebar();
+                    else openMobileSidebar();
+                });
+            }
+
+            backdrop?.addEventListener('click', closeMobileSidebar);
+
+            function applyResponsiveDefaults() {
+                closeMobileSidebar();
+
+                if (isMobile()) {
+                    sidebar.classList.add('collapsed');
+                    mainContent.classList.add('sidebar-collapsed');
+                    footer?.classList.add('sidebar-collapsed');
+                } else {
+                    // Desktop: deja abierto por defecto
+                    sidebar.classList.remove('collapsed');
+                    mainContent.classList.remove('sidebar-collapsed');
+                    footer?.classList.remove('sidebar-collapsed');
+                }
+                syncDesktopIcon();
+            }
+
+            window.addEventListener('load', applyResponsiveDefaults);
+            window.addEventListener('resize', applyResponsiveDefaults);
+        })();
     </script>
 </body>
 </html>
