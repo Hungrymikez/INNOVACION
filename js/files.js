@@ -131,9 +131,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Descargar archivo
         const downloadBtn = e.target.closest(".download-btn");
         if (downloadBtn) {
-            const fileId = downloadBtn.dataset.id;
-            const isModified = downloadBtn.dataset.showModified === "true";
-            handleDownloadFile(fileId, isModified);
+            await handleDownloadFile(downloadBtn);
             return;
         }
 
@@ -908,92 +906,88 @@ async function handleDeleteFile() {
 /**
  * Descarga un archivo
  */
-function handleDownloadFile(id, isModified) {
+async function handleDownloadFile(downloadBtnEl) {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        if (window.showSessionExpiredModal) window.showSessionExpiredModal();
+        return;
+    }
+
+    const originalHtml = downloadBtnEl.innerHTML;
+    downloadBtnEl.disabled = true;
+    downloadBtnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Descargando';
+
     try {
-        const downloadUrl = fileService.downloadFileUrl(id, isModified);
-        const fullUrl = `https://fastapi-final-4i0w.onrender.com/${downloadUrl}`;
-        const token = localStorage.getItem('access_token');
-        
-        // Intentar obtener el nombre del archivo desde la fila de la tabla
+        const id = downloadBtnEl.dataset.id;
+        const isModificado = downloadBtnEl.dataset.isModificado === 'true';
+
+        // Obtener el nombre del archivo desde la fila de la tabla (fallback)
         let fileNameFromTable = null;
-        const downloadBtn = document.querySelector(`.download-btn[data-id="${id}"]`);
-        if (downloadBtn) {
-            // Buscar la celda de nombre_archivo en la misma fila
-            const row = downloadBtn.closest('tr');
-            if (row) {
-                const cells = row.querySelectorAll('td');
-                // El nombre del archivo generalmente está en una de las primeras celdas
-                // Usualmente después de regional y responsable
-                if (cells.length >= 9) {
-                    fileNameFromTable = cells[8].textContent.trim();
-                }
-            }
+        const row = downloadBtnEl.closest('tr');
+        if (row) {
+            const cells = row.querySelectorAll('td');
+            if (cells.length >= 9) fileNameFromTable = cells[8].textContent.trim();
         }
-        
-        // Usar fetch para descargar con autenticación
-        fetch(fullUrl, {
+        const endpoint = `innovacion_donald/${id}/download?is_modificado=${isModificado}`;
+        const fullUrl = `https://fastapi-final-4i0w.onrender.com/${endpoint}`;
+
+        const response = await fetch(fullUrl, {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${token}`
             }
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Error: ${response.status}`);
-            }
-            
-            // Guardar el header de disposición para luego
-            const contentDisposition = response.headers.get('content-disposition');
-            return response.blob().then(blob => ({ blob, contentDisposition }));
-        })
-        .then(({ blob, contentDisposition }) => {
-            // Crear un URL para el blob
-            const blobUrl = window.URL.createObjectURL(blob);
-            
-            // Extraer el nombre del archivo en orden de prioridad:
-            // 1. Del header content-disposition
-            // 2. Del nombre en la tabla
-            // 3. Nombre por defecto
-            let fileName = 'archivo.xlsx';
-            
-            if (contentDisposition) {
-                // Intentar diferentes patrones de extracción
-                let match = contentDisposition.match(/filename\*=(?:UTF-8'')?([^;]+)/);
-                if (!match) {
-                    match = contentDisposition.match(/filename=([^;]+)/);
-                }
-                if (match) {
-                    fileName = match[1].replace(/"/g, '').trim();
-                }
-            } else if (fileNameFromTable && fileNameFromTable !== '-') {
-                fileName = fileNameFromTable;
-            }
-            
-            // Asegurar que tiene extensión
-            if (!fileName.includes('.')) {
-                fileName += '.xlsx';
-            }
-            
-            console.log("Descargando archivo como:", fileName);
-            
-            // Crear un elemento <a> y simular el click
-            const link = document.createElement('a');
-            link.href = blobUrl;
-            link.download = fileName;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-            // Liberar el URL del blob
-            window.URL.revokeObjectURL(blobUrl);
-        })
-        .catch(err => {
-            console.error("Error descargando archivo:", err);
-            alert("Error al descargar el archivo: " + err.message);
         });
+
+        if (response.status === 401 || response.status === 403) {
+            if (!window.sessionExpiredShown) {
+                window.sessionExpiredShown = true;
+                setTimeout(() => (window.sessionExpiredShown = false), 2000);
+                if (window.showSessionExpiredModal) window.showSessionExpiredModal();
+            }
+            throw new Error('Sesión expirada');
+        }
+
+        if (!response.ok) {
+            let detail = null;
+            try {
+                const data = await response.clone().json();
+                detail = data?.detail ?? null;
+            } catch {
+                // ignore
+            }
+            const msg = detail ? `Error: ${response.status} (${detail})` : `Error: ${response.status}`;
+            throw new Error(msg);
+        }
+
+        const contentDisposition = response.headers.get('content-disposition');
+        const blob = await response.blob();
+
+        const blobUrl = window.URL.createObjectURL(blob);
+
+        let fileName = 'archivo.xlsx';
+        if (contentDisposition) {
+            let match = contentDisposition.match(/filename\*=(?:UTF-8'')?([^;]+)/);
+            if (!match) match = contentDisposition.match(/filename=([^;]+)/);
+            if (match) fileName = match[1].replace(/"/g, '').trim();
+        } else if (fileNameFromTable && fileNameFromTable !== '-') {
+            fileName = fileNameFromTable;
+        }
+
+        if (!fileName.includes('.')) fileName += '.xlsx';
+
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
     } catch (err) {
-        console.error("Error en descarga:", err);
-        alert("Error al descargar el archivo: " + err.message);
+        console.error('Error en descarga:', err);
+        alert('Error al descargar el archivo: ' + (err?.message || String(err)));
+    } finally {
+        downloadBtnEl.innerHTML = originalHtml;
+        downloadBtnEl.disabled = false;
     }
 }
 
@@ -1014,7 +1008,7 @@ function buildOriginalRow(file) {
             <td>${file.ruta_almacenamiento || "-"}</td>
             <td>
                 <div class="btn-group" role="group">
-                    <button class="btn btn-success btn-sm download-btn" data-id="${file.id}" data-show-modified="false">
+                    <button class="btn btn-success btn-sm download-btn" data-id="${file.id}" data-is-modificado="false">
                         <i class="fas fa-download me-1"></i> Descargar
                     </button>
                     <button class="btn btn-info btn-sm view-versions-btn" data-id="${file.id}" data-project-id="${file.projectId}">
@@ -1091,7 +1085,7 @@ function buildModifiedRow(file) {
             <td>${file.ruta_almacenamiento || "-"}</td>
             <td>
                 <div class="btn-group" role="group">
-                    <button class="btn btn-success btn-sm download-btn" data-id="${file.id}" data-show-modified="true">
+                    <button class="btn btn-success btn-sm download-btn" data-id="${file.id}" data-is-modificado="true">
                         <i class="fas fa-download me-1"></i> Descargar
                     </button>
                     <button class="btn btn-warning btn-sm update-file-btn" data-id="${file.id}" data-original-id="${file.id_archivo_original ?? ''}" data-is-modified="true" ${(!file.id_archivo_original && file.id_archivo_original !== 0) ? 'disabled title="No se puede editar: falta vínculo al archivo original"' : ''}>
@@ -1159,7 +1153,7 @@ function buildCurrentRow(file) {
             <td>${file.ruta_almacenamiento || "-"}</td>
             <td>
                 <div class="btn-group" role="group">
-                    <button class="btn btn-success btn-sm download-btn" data-id="${file.id}" data-show-modified="${(file.is_modificado === true || file.es_modificado === true || file.isModified === true) ? 'true' : 'false'}">
+                    <button class="btn btn-success btn-sm download-btn" data-id="${file.id}" data-is-modificado="${(file.is_modificado === true || file.es_modificado === true || file.isModified === true) ? 'true' : 'false'}">
                         <i class="fas fa-download me-1"></i> Descargar
                     </button>
                     <button class="btn btn-warning btn-sm update-file-btn" data-id="${file.id}" data-original-id="${file.id_archivo_original ?? ''}" data-is-modified="${(file.is_modificado === true || file.es_modificado === true || file.isModified === true) ? 'true' : 'false'}" ${((file.is_modificado === true || file.es_modificado === true || file.isModified === true) && !file.id_archivo_original && file.id_archivo_original !== 0) ? 'disabled title="No se puede editar: falta vínculo al archivo original"' : ''}>

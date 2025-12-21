@@ -150,7 +150,7 @@ export const fileService = {
     // GET /innovacion/{id}/download
     // ============================
     downloadFileUrl: (id, isModified = false) => {
-        const flag = isModified ? 1 : 0;
+        const flag = isModified ? 'true' : 'false';
         return `innovacion_donald/${id}/download?is_modificado=${flag}`;
     },
     // ============================
