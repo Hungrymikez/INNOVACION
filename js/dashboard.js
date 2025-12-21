@@ -24,7 +24,9 @@ document.addEventListener("DOMContentLoaded", function(){
   console.log("El documento HTML HA SIDO CARGADO");
   const token = localStorage.getItem('access_token');
   if (!token){
-    window.location.href = '/index.html';
+    // window.location.href = '/index.html';  ESTA ES LA VERSION PARA LOCAL
+        window.location.href = './index.html';
+
     return;
     // window.location.replace('index.html');  ESTE ES PARA QUE SE LE BLOQUEE LAS FLECHAS DE DEVOLVER EN EL NAVEGADOR
   }else{

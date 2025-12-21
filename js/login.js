@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const token = localStorage.getItem('access_token');
     if (token) {
     // Opcional: verificar si el token sigue válido (con una llamada al backend)
-    window.location.replace('dashboard.html'); // usa replace para que no pueda volver atrás al login
+    window.location.replace('./dashboard.html'); // usa replace para que no pueda volver atrás al login
     }
 
     const form = document.getElementById('loginForm');
@@ -199,7 +199,7 @@ boton.addEventListener("click", (event)=>{
 
         // REDIRECCIÓN DESPUÉS DEL LOGIN EXITOSO
         // Opción 1: Redirección inmediata
-        window.location.href = "dashboard.html";
+        window.location.href = "./dashboard.html";
         
         // Opción 2: Reemplazar la página actual (no permite volver atrás)
         // window.location.replace("dashboard.html");
