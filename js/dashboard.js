@@ -11,7 +11,8 @@ if (logoutButton) {
     console.log('Cerrando sesión...');
     localStorage.removeItem('access_token');
     localStorage.removeItem('user');
-    window.location.href = '/index.html';
+    // window.location.href = '/index.html'; ESTE ES NORMAL PERO COMO ES EN GITHUB TOCA CON LA OTRA DIRECCION
+    window.location.hred('INNOVACION/index.html'); // Evita que el usuario pueda volver con las flechas del navegador
   });
 };
 
